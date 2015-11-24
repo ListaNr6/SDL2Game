@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+#include <list>
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_image.h>
@@ -20,7 +21,7 @@ void Adjust_Rectangles(SDL_Rect* FirstElementOfArray, int x, int y){
     SDL_Rect* Element = FirstElementOfArray;
     for (int i = 0; i<x; i++){
         for (int j = 0; j<y; j++){
-            (*Element).x = i*20; (*Element).y = j*20; (*Element).w = 20; (*Element).h = 20; 
+            (*Element).x = i*20; (*Element).y = j*20; (*Element).w = 20; (*Element).h = 20;
             Element = Element+1;
         }
     }
@@ -32,13 +33,13 @@ SDL_Rect* ReturnRectangle(SDL_Rect* FirstElementOfArray, int x, int y){
 
 struct Level{
     SDL_Texture* grass;
-    SDL_Texture* ground; 
+    SDL_Texture* ground;
     SDL_Texture* tree;
     SDL_Renderer* renderer;
     char RawTerrainMap[40][30];
     char RawObjectsMap[40][30];
     SDL_Rect Tile[40][30];
-    
+
     void LoadNewRawTerrain(const char* TerrainFileName);
     void LoadNewRawObjects(const char* ObjectsFileName);
     void DrawTerrain();
@@ -55,13 +56,13 @@ Level::Level(SDL_Renderer* renderer){
 void Level::LoadNewRawTerrain(const char* TerrainFileName){
     std::ifstream ReadFile;
     ReadFile.open(TerrainFileName);
-    char temporary_char;  
+    char temporary_char;
     int x=0; int y=0;
     while (ReadFile.get(temporary_char)){
-    if (temporary_char != '\n'){
-        if (x == 40){ y++; x = 0;}
-        RawTerrainMap[x][y] = temporary_char;
-        x++;
+        if (temporary_char != '\n'){
+            if (x == 40){ y++; x = 0;}
+            RawTerrainMap[x][y] = temporary_char;
+            x++;
         }
     }
     ReadFile.close();
@@ -69,13 +70,13 @@ void Level::LoadNewRawTerrain(const char* TerrainFileName){
 void Level::LoadNewRawObjects(const char* ObjectsFileName){
     std::ifstream ReadFile;
     ReadFile.open(ObjectsFileName);
-    char temporary_char;  
+    char temporary_char;
     int x=0; int y=0;
     while (ReadFile.get(temporary_char)){
-    if (temporary_char != '\n'){
-        if (x == 40){ y++; x = 0;}
-        RawObjectsMap[x][y] = temporary_char;
-        x++;
+        if (temporary_char != '\n'){
+            if (x == 40){ y++; x = 0;}
+            RawObjectsMap[x][y] = temporary_char;
+            x++;
         }
     }
     ReadFile.close();
@@ -109,9 +110,12 @@ void Level::DrawObjects(){
 struct Hero{
     SDL_Rect rect;
     SDL_Texture* body;
+    std::list<SDL_Scancode> KeysPressed;
     char MovementDirection;
     Level* level;
-    void Move(SDL_Event* move);
+    int VelocityX, VelocityY;
+    void GetVelocity();
+    void CheckKeysPressed(SDL_Event* KeyPressed);
     void Move();
     void Draw();
     Hero(int x, int y, Level* level);
@@ -121,68 +125,130 @@ Hero::Hero(int x, int y, Level* level){
     MovementDirection = '0';
     this->level = level;
     body = LoadTexture(level->renderer, "tekstury/character.png");
+    VelocityX = 0, VelocityY = 0;
+    KeysPressed.clear();
+}
+
+void Hero::CheckKeysPressed(SDL_Event* KeyPressed){
+    while(SDL_PollEvent (KeyPressed)){
+        switch (KeyPressed->key.type){
+            case SDL_KEYDOWN:
+                switch (KeyPressed->key.keysym.scancode) {
+                    case SDL_SCANCODE_LEFT:
+                        KeysPressed.push_back(SDL_SCANCODE_LEFT);
+                        break;
+                    case SDL_SCANCODE_RIGHT:
+                        KeysPressed.push_back(SDL_SCANCODE_RIGHT);
+                        break;
+                    case SDL_SCANCODE_UP:
+                        KeysPressed.push_back(SDL_SCANCODE_UP);
+                        break;
+                    case SDL_SCANCODE_DOWN:
+                        KeysPressed.push_back(SDL_SCANCODE_DOWN);
+                        break;
+                    default:
+                        break;
+                }
+
+                break;
+            case SDL_KEYUP:
+                switch (KeyPressed->key.keysym.scancode) {
+                    case SDL_SCANCODE_LEFT:
+                        KeysPressed.remove(SDL_SCANCODE_LEFT);
+                        break;
+                    case SDL_SCANCODE_RIGHT:
+                        KeysPressed.remove(SDL_SCANCODE_RIGHT);
+                        break;
+                    case SDL_SCANCODE_UP:
+                        KeysPressed.remove(SDL_SCANCODE_UP);
+                        break;
+                    case SDL_SCANCODE_DOWN:
+                        KeysPressed.remove(SDL_SCANCODE_DOWN);
+                        break;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Hero::GetVelocity(){
+    if(((rect.x%20) == 0) && ((rect.y % 20) == 0) ){
+        if (KeysPressed.empty() == false){
+            switch (KeysPressed.back()){
+                case (SDL_SCANCODE_LEFT):
+                    if (level->RawObjectsMap[((rect.x)/20)-1][rect.y/20] == 'X'){
+                        VelocityX = -1;
+                        VelocityY = 0;
+                    }
+                    else{
+                        VelocityX = 0;
+                        VelocityY = 0;                        
+                    }
+                    break;
+
+                case (SDL_SCANCODE_RIGHT):
+                    if (level->RawObjectsMap[((rect.x)/20)+1][rect.y/20] == 'X'){
+                        VelocityX = 1;
+                        VelocityY = 0;
+                    }
+                    else{
+                        VelocityX = 0;
+                        VelocityY = 0;                        
+                    }
+                    break;
+
+                case (SDL_SCANCODE_UP):
+                    if (level->RawObjectsMap[((rect.x)/20)][(rect.y)/20 - 1] == 'X'){
+                        VelocityX = 0;
+                        VelocityY = -1;
+                    }
+                    else{
+                        VelocityX = 0;
+                        VelocityY = 0;                        
+                    }
+                    break;
+
+                case (SDL_SCANCODE_DOWN):
+                    if (level->RawObjectsMap[((rect.x)/20)][(rect.y)/20 + 1] == 'X'){
+                        VelocityX = 0;
+                        VelocityY = 1;
+                    }
+                    else{
+                        VelocityX = 0;
+                        VelocityY = 0;                        
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        else{
+            VelocityX = 0;
+            VelocityY = 0;
+        }
+    }
+    
+}
+
+void Hero::Move(){
+    GetVelocity();
+    if (VelocityX == -1){
+        rect.x--;
+    }
+    else if (VelocityX == 1){
+        rect.x++;
+    }
+    else if (VelocityY == -1){
+        rect.y--;
+    }
+    else if (VelocityY == 1){
+        rect.y++;
+    }
 }
 void Hero::Draw(){
     SDL_RenderCopy(level->renderer, body, NULL, &this->rect);
-}
-void Hero::Move(SDL_Event* move){
-    if(((rect.x%20) == 0) && ((rect.y % 20) == 0) ){
-        MovementDirection = '0';
-    }
-    
-    if (MovementDirection == '0'){
-        if (move->key.keysym.scancode == SDL_SCANCODE_LEFT){
-            if (level->RawObjectsMap[((rect.x)/20)-1][rect.y/20] == 'X'){
-                MovementDirection = 'L';
-            }
-        }
-        else if (move->key.keysym.scancode == SDL_SCANCODE_RIGHT){
-            if (level->RawObjectsMap[((rect.x)/20)+1][rect.y/20] == 'X'){
-                MovementDirection = 'R';
-            }
-        }
-        else if (move->key.keysym.scancode == SDL_SCANCODE_UP){
-            if (level->RawObjectsMap[((rect.x)/20)][(rect.y)/20 - 1] == 'X'){
-                MovementDirection = 'U';
-            }
-        }
-        else if (move->key.keysym.scancode == SDL_SCANCODE_DOWN){
-            if (level->RawObjectsMap[((rect.x)/20)][(rect.y)/20 + 1] == 'X'){
-                MovementDirection = 'D';
-            }
-        }
-    }
-    
-    if (MovementDirection == 'L'){
-        this->rect.x--;
-    }
-    else if (MovementDirection == 'R'){
-        this->rect.x++;
-    }
-    else if (MovementDirection == 'U'){
-        this->rect.y--;
-    }
-    else if (MovementDirection == 'D'){
-        this->rect.y++;
-    }
-    else;
-}
-void Hero::Move(){
-    if(((rect.x%20) == 0) && ((rect.y % 20) == 0) ){
-        MovementDirection = '0';
-    }
-        if (MovementDirection == 'L'){
-        this->rect.x--;
-    }
-    else if (MovementDirection == 'R'){
-        this->rect.x++;
-    }
-    else if (MovementDirection == 'U'){
-        this->rect.y--;
-    }
-    else if (MovementDirection == 'D'){
-        this->rect.y++;
-    }
 }
 
 struct Timer{
@@ -223,23 +289,24 @@ void MakeTheScreenBlack(SDL_Renderer* renderer){
 }
 
 int main( int argc, char* argv[] ) {
-    
+
     SDL_Init(SDL_INIT_VIDEO);
     SDL_SetMainReady();
-    
+
     SDL_Window* window = SDL_CreateWindow( "Szalwiuszke", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_SHOWN );
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED );
-    
+
     Level NewLevel(renderer);
-    Hero MainHero(60, 60, &NewLevel);
+    Hero MainHero(100, 100, &NewLevel);
     SDL_Event event;
-    
+
     MakeTheScreenBlack(renderer);
     NewLevel.LoadNewRawTerrain("Mapy/mapa_powierzchni1.txt");
     NewLevel.LoadNewRawObjects("Mapy/Objects1.txt");
-    
+
     Timer NewTimer(10);
-    
+
+
     while (1) {
         if (SDL_PollEvent(&event) && event.key.keysym.scancode == SDL_SCANCODE_A) {
             NewLevel.DrawTerrain();
@@ -248,17 +315,16 @@ int main( int argc, char* argv[] ) {
             SDL_RenderPresent(renderer);
             NewTimer.SetStartingTime();
             while (1){
-                if (SDL_PollEvent(&event)) 
-                    MainHero.Move(&event);
-                else MainHero.Move();
+                MainHero.CheckKeysPressed(&event);
+                MainHero.Move();
                 NewLevel.DrawTerrain();
                 NewLevel.DrawObjects();
                 MainHero.Draw();
                 SDL_RenderPresent(renderer);
                 if ( event.key.keysym.scancode == SDL_SCANCODE_D){
                     SDL_DestroyWindow(window);
-                        SDL_Quit();
-                        return 0;
+                    SDL_Quit();
+                    return 0;
                 }
                 NewTimer.MakeTheDelay();
             }
